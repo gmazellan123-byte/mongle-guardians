@@ -16469,6 +16469,8 @@ ${[0, 1, 2, 3].map(slot => {
         // 뒤로 가기로 닫을 창 (위에 뜨는 확인 창부터)
         const BACK_CLOSE_ORDER = ['exitModal', 'newGameConfirmModal', 'gearModal', 'endingModal', 'hellEndModal', 'prologueModal',
             'miniModal', 'statusModal', 'shopModal', 'achieveModal', 'dailyModal', 'infoModal', 'mapModal', 'pauseModal'];
+        // 화면을 돌리면 safeArea를 다시 맞춤
+        window.addEventListener('resize', () => { if (window.MongleHost && window.MongleHost.safeArea) window.MongleHost.applySafeArea(); });
         window.MongleHost = {
             sdk: null,
             inApp: false, // 원스토어 앱 안에서 SDK 초기화에 성공했는지
@@ -16494,13 +16496,21 @@ ${[0, 1, 2, 3].map(slot => {
             setSilent(on) {
                 sfx.setHold('silent', on);
             },
-            // 앱이 알려 준 시스템 바 여백(px)을 safe-area 대신 씀
+            // 앱이 알려 준 시스템 바 여백을 safe-area 대신 씀.
+            // 실기기에서 값이 기기 픽셀로 와서 그대로 쓰면 HUD가 크게 내려옴 → CSS 픽셀로 바꾸고,
+            // 지금 화면 방향에서 시스템 바가 있을 수 있는 변만(가로: 좌우, 세로: 위아래), 최대 48px까지
+            safeArea: null,
             applySafeArea(sa) {
+                if (sa) this.safeArea = sa;
+                sa = this.safeArea;
                 if (!sa) return;
                 const st = document.documentElement.style;
-                for (const [k, v] of [['sat', sa.top], ['sar', sa.right], ['sab', sa.bottom], ['sal', sa.left]]) {
-                    if (typeof v === 'number' && v >= 0) st.setProperty(`--os-${k}`, `${v}px`);
-                }
+                const dpr = window.devicePixelRatio || 1;
+                const land = window.innerWidth > window.innerHeight;
+                const css = (v, on) => (on && typeof v === 'number' && v > 0 ? Math.min(48, Math.round(v / dpr)) : 0);
+                const vals = { sat: css(sa.top, !land), sab: css(sa.bottom, !land), sal: css(sa.left, land), sar: css(sa.right, land) };
+                for (const k in vals) st.setProperty(`--os-${k}`, `${vals[k]}px`);
+                console.log('[원스토어] safeArea', JSON.stringify(sa), 'dpr', dpr, '→', JSON.stringify(vals));
                 if (typeof fitActionPad === 'function') fitActionPad();
             },
             // 동기 함수: 열린 창을 닫았거나 게임을 멈췄으면 true, 아니면 false(앱의 종료 확인 팝업)
