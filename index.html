@@ -769,7 +769,9 @@
         .result-chips span { background: #fffbeb; border: 2px solid #fde68a; border-radius: 999px; padding: 4px 9px; font-size: 13px; font-weight: 800; color: #475569; white-space: nowrap; font-variant-numeric: tabular-nums; }
         .result-chips span.gold { background: #fef3c7; border-color: #fbbf24; color: #b45309; }
         .result-chips b { font-weight: 900; }
-        .result-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+        /* 결과 창 버튼 간격: 광고 줄·다음 Stage·다시 하기/지도 사이를 같은 간격으로 (화면 높이에 비례) */
+        #gameOverModal { --res-gap: clamp(10px, 2.2vh, 16px); }
+        .result-actions { display: grid; grid-template-columns: 1fr 1fr; gap: var(--res-gap, 12px); }
         .result-actions .cute-btn { padding: 11px 12px; }
         .result-actions #btnNextStage { grid-column: 1 / -1; }
         html body .result-actions #btnNextStage { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1px; min-width: 0; line-height: 1.15; padding-top: 7px; padding-bottom: 7px; }
@@ -1396,7 +1398,7 @@
         .ad-track { height: 8px; border-radius: 99px; background: #334155; overflow: hidden; margin-bottom: 8px; }
         #adBar { height: 100%; width: 0; background: linear-gradient(90deg, #facc15, #fb923c); }
         .ad-btn { position: relative; }
-        .res-ad-row { display: flex; gap: 8px; margin: 10px 0 0; }
+        .res-ad-row { display: flex; gap: var(--res-gap, 10px); margin: 0 0 calc(var(--res-gap, 12px) + 4px); }
         .res-ad-row:empty { display: none; }
         .res-ad-row .cute-btn { flex: 1 1 0; min-width: 0; padding: 9px 6px; font-size: 14px; }
         .revive-heart { font-size: 54px; animation: revivePulse 0.9s ease-in-out infinite; }
@@ -2269,6 +2271,7 @@
             html.land560 #resTitle { font-size: 24px !important; }
             html.land560 .result-chips { margin: 8px 0 10px; gap: 5px; }
             html.land560 .result-chips span { font-size: 13px; padding: 3px 9px; }
+            html.land560 #gameOverModal { --res-gap: clamp(8px, 2.4vh, 12px); }
             html.land560 .result-actions { display: flex; }
             html.land560 .result-actions .cute-btn { flex: 1 1 0; padding: 9px 8px; font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
             html.land560 .result-actions #btnNextStage { flex: 1.6 1 0; }
