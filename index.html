@@ -2118,9 +2118,6 @@
             text-shadow: 0 0 10px rgba(255, 255, 255, 0.18);
             animation: titleBlink 2.8s ease-in-out infinite; }
         @keyframes titleBlink { 0%, 100% { opacity: 1; } 50% { opacity: 0.15; } }
-        /* 처음 화면 오른쪽 아래: 반투명 '처음부터 시작' (확인 창을 거쳐 기록 초기화) */
-        .title-restart { position: absolute; right: max(14px, var(--sar)); bottom: max(12px, var(--sab)); z-index: 2; font-family: 'Jua', 'Malgun Gothic', sans-serif; font-size: 13px; color: rgba(255, 255, 255, 0.85); background: rgba(15, 23, 42, 0.32); border: 1px solid rgba(255, 255, 255, 0.35); border-radius: 999px; padding: 6px 14px; cursor: pointer; -webkit-backdrop-filter: blur(4px); backdrop-filter: blur(4px); opacity: 0.75; transition: opacity 0.15s; }
-        .title-restart:hover, .title-restart:active { opacity: 1; }
         html.mq-h560 body .title-btn b { font-size: 36px; }
         /* 가로 화면: 수호자 여덟이 가운데를 차지하므로 버튼은 화면 아래쪽에 */
         html:not(.port) body .title-screen { padding-bottom: calc(var(--sab) + calc(3 * var(--vh, 1vh))); }
@@ -2679,7 +2676,6 @@
                 <b>NEW GAME</b>
             </button>
         </div>
-        <button id="btnTitleRestart" class="title-restart hidden">처음부터 시작</button>
     </div>
 
     <!-- 새로 시작 확인 -->
@@ -16266,7 +16262,6 @@ ${[0, 1, 2, 3].map(slot => {
             // 가운데 버튼 하나만: 처음이면 시작하기, 기록이 있으면 이어하기
             btn.classList.toggle('hidden', !has);
             document.getElementById('btnTitleNew').classList.toggle('hidden', has);
-            document.getElementById('btnTitleRestart').classList.toggle('hidden', !has);
             document.getElementById('btnTitleSound').textContent = sfx.enabled ? '🔊' : '🔇';
         }
         // 처음 화면 카메라 앞을 가리는 나무·덤불 치우기
@@ -16356,7 +16351,6 @@ ${[0, 1, 2, 3].map(slot => {
         }
         document.getElementById('btnTitleContinue').addEventListener('click', continueAdventure);
         document.getElementById('btnTitleNew').addEventListener('click', requestNewGame);
-        document.getElementById('btnTitleRestart').addEventListener('click', requestNewGame);
         document.getElementById('btnConfirmNewGame').addEventListener('click', startFreshAdventure);
         document.getElementById('btnCancelNewGame').addEventListener('click', () => {
             sfx.pop();
