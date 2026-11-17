@@ -68,6 +68,11 @@
                         return document.fonts ? document.fonts.ready : null;
                     })
                     .then(() => {
+                        sdk.setLoadingProgress(85);
+                        // 서버 저장이 더 최신이면 받아 옴 (실패하면 기기 저장으로 계속)
+                        return window.MongleHost && window.MongleHost.cloudSync();
+                    })
+                    .then(() => {
                         sdk.setLoadingProgress(100);
                         return sdk.startGameAsync();
                     })
@@ -7576,6 +7581,7 @@
                         this.lastPlayed = parsed.lastPlayed || 0;
                         this.lastChar = parsed.lastChar || 'archer';
                         this.secretSeen = !!parsed.secretSeen;
+                        this.savedAt = parsed.savedAt || 0;
                         if (parsed.camera) this.camera = { ...this.camera, ...parsed.camera };
                         this.heroes = parsed.heroes || {};
                         this.world = { cleared: {}, minis: {}, ...(parsed.world || {}) };
@@ -7586,7 +7592,11 @@
             },
             save() {
                 try {
+                    // 저장 시각(클라우드와 비교용)은 서버 저장과 맞춰 본 뒤부터 올림
+                    // (게임이 켜질 때 만드는 기본 저장·옮겨 담기가 서버의 진짜 저장보다 최신으로 보이지 않게)
+                    if (window.CloudSave && CloudSave.synced) this.savedAt = Date.now();
                     SafeStorage.setItem(SAVE_KEY_PERMANENT, JSON.stringify({
+                        savedAt: this.savedAt,
                         gold: this.gold,
                         gems: this.gems,
                         bestTime: this.bestTime,
@@ -7611,6 +7621,7 @@
                     }));
                     this.dirty = false;
                 } catch (e) {}
+                if (window.CloudSave) CloudSave.schedule();
             },
             getActiveRun(charId) {
                 try {
@@ -7684,10 +7695,13 @@
                             .slice(0, 100).map(d => ({ ...d }))
                     };
                     SafeStorage.setItem(activeRunKey(player.charType), JSON.stringify(snapshot));
+                    if (window.CloudSave && CloudSave.synced) this.savedAt = Date.now();
+                    if (window.CloudSave) CloudSave.schedule();
                 } catch (e) {}
             },
             clearActiveRun(charId) {
                 SafeStorage.removeItem(activeRunKey(charId));
+                if (window.CloudSave) CloudSave.schedule();
             },
             // 이어할 기록이 하나라도 있는지
             hasProgress() {
@@ -12563,6 +12577,89 @@ ${[0, 1, 2, 3].map(slot => {
                 return false;
             }
         };
+        // ---------- ☁️ 클라우드 저장 (원스토어 앱 안, playerId 기준) ----------
+        // 원스토어 앱(iframe) 안의 브라우저 저장소는 앱이 정리하거나 분리해서 예전 저장으로 돌아갈 수 있음
+        // → 저장할 때마다 서버에도 올리고, 게임을 열 때 서버와 기기 중 더 최신 저장을 씀
+        // 기기 저장(SAVE_KEY_PERMANENT)과 수호자별 이어하기 기록을 한 묶음으로 올림
+        window.CloudSave = {
+            timer: 0,
+            synced: false, // 서버 저장과 맞춰 봤는지 (그 전에는 저장 시각을 올리지 않음)
+            enabled() {
+                const h = window.MongleHost;
+                return !!(h && h.inApp && h.playerId && ONESTORE_ADS.serverUrl);
+            },
+            snapshot() {
+                const runs = {};
+                for (const t of Object.keys(CHARACTER_DATA)) {
+                    const r = SafeStorage.getItem(activeRunKey(t));
+                    if (r) runs[t] = r;
+                }
+                return { perm: SafeStorage.getItem(SAVE_KEY_PERMANENT), runs };
+            },
+            body() {
+                return JSON.stringify({ playerId: MongleHost.playerId, savedAt: SaveData.savedAt || 0, data: JSON.stringify(this.snapshot()) });
+            },
+            // 저장이 몰릴 때 한 번만 (4초 뒤)
+            schedule() {
+                if (!this.enabled()) return;
+                clearTimeout(this.timer);
+                this.timer = setTimeout(() => this.upload(), 4000);
+            },
+            upload() {
+                if (!this.enabled()) return;
+                clearTimeout(this.timer);
+                fetch(`${ONESTORE_ADS.serverUrl}/save`, { method: 'POST', headers: { 'Content-Type': 'text/plain' }, body: this.body(), keepalive: true }).catch(() => {});
+            },
+            // 종료·백그라운드: 바로 보냄 (응답을 기다리지 않음)
+            flush() {
+                if (!this.enabled()) return;
+                clearTimeout(this.timer);
+                try {
+                    if (navigator.sendBeacon && navigator.sendBeacon(`${ONESTORE_ADS.serverUrl}/save`, new Blob([this.body()], { type: 'text/plain' }))) return;
+                } catch (e) {}
+                this.upload();
+            },
+            // 게임 시작 때: 서버 저장이 더 최신이면 기기 저장을 바꾸고 다시 불러옴, 기기가 더 최신이면 올림
+            async sync() {
+                if (!this.enabled()) return;
+                try {
+                    await this.pull();
+                } finally {
+                    this.synced = true;
+                }
+            },
+            async pull() {
+                try {
+                    const ctl = new AbortController();
+                    const to = setTimeout(() => ctl.abort(), 5000);
+                    const res = await fetch(`${ONESTORE_ADS.serverUrl}/save?playerId=${encodeURIComponent(MongleHost.playerId)}`, { signal: ctl.signal });
+                    clearTimeout(to);
+                    if (!res.ok) return;
+                    const j = await res.json();
+                    const local = SaveData.savedAt || 0;
+                    const remote = (j && j.savedAt) || 0;
+                    if (j && j.data && remote > local) {
+                        const snap = JSON.parse(j.data);
+                        if (snap.perm) SafeStorage.setItem(SAVE_KEY_PERMANENT, snap.perm);
+                        for (const t of Object.keys(CHARACTER_DATA)) {
+                            if (snap.runs && snap.runs[t]) SafeStorage.setItem(activeRunKey(t), snap.runs[t]);
+                            else SafeStorage.removeItem(activeRunKey(t));
+                        }
+                        SaveData.load();
+                        SaveData.savedAt = remote;
+                        dedupeGear();
+                        updateMenuGoldAndBest();
+                        if (titleOpen) showTitle();
+                        console.log('[저장] 서버 저장을 불러왔어요', new Date(remote).toISOString());
+                    } else if (local > remote) {
+                        this.synced = true;
+                        this.upload();
+                    }
+                } catch (e) {
+                    console.warn('[저장] 서버 확인 실패 (기기 저장으로 계속)', e);
+                }
+            }
+        };
         const AdBridge = {
             busy: false,
             granted: new Set(), // 같은 requestId로 두 번 보상하지 않게
@@ -16487,6 +16584,7 @@ ${[0, 1, 2, 3].map(slot => {
         }
         function autoSaveOnLeave() {
             saveProgressNow();
+            if (window.CloudSave) CloudSave.flush();
             pauseGame();
         }
 
@@ -16529,11 +16627,18 @@ ${[0, 1, 2, 3].map(slot => {
             // 종료 때: 동기 저장만 (localStorage, 0.5초 안에 끝남)
             saveNow() {
                 try { saveProgressNow(true); } catch (e) {}
+                CloudSave.flush();
+            },
+            cloudSync() {
+                return CloudSave.sync();
             },
             // reason: 'background' | 'ad' | 'payment'. 여러 번 와도 같은 결과
             pause(reason) {
                 sfx.setHold('hostPaused', true);
-                if (reason === 'background') autoSaveOnLeave();
+                if (reason === 'background') {
+                    autoSaveOnLeave();
+                    CloudSave.flush();
+                }
             },
             // 게임은 일시정지 창에 머무름 (이어하기는 플레이어가 직접)
             resume(e) {
