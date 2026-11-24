@@ -16333,13 +16333,28 @@ ${[0, 1, 2, 3].map(slot => {
         document.getElementById('btnCloseStatus').addEventListener('click', resumeFromPause);
         document.getElementById('btnFullscreen').addEventListener('click', toggleFullscreen);
 
-        document.getElementById('btnSoundToggle').addEventListener('click', (e) => {
+        // 소리 버튼: 아이콘은 '지금 실제로 소리가 나는지'를 보여 줌 (기기 무음 모드로 꺼진 경우도 🔇)
+        function soundAudible() {
+            return sfx.enabled && !sfx.silent;
+        }
+        function updateSoundIcons() {
+            const icon = soundAudible() ? '🔊' : '🔇';
+            for (const id of ['btnSoundToggle', 'btnTitleSound']) {
+                const b = document.getElementById(id);
+                if (b) b.textContent = icon;
+            }
+        }
+        // 한 번 누르면: 소리가 나고 있으면 끄고, 꺼져 있으면(무음 모드 때문이어도) 바로 켬
+        function toggleSound() {
             sfx.init();
-            sfx.enabled = !sfx.enabled;
-            // 직접 켜면 기기 무음 모드여도 소리를 냄
-            if (sfx.enabled && sfx.silent) sfx.setHold('silent', false);
-            e.currentTarget.textContent = sfx.enabled ? '🔊' : '🔇';
-        });
+            if (soundAudible()) sfx.enabled = false;
+            else {
+                sfx.enabled = true;
+                if (sfx.silent) sfx.setHold('silent', false); // 직접 켜면 기기 무음 모드여도 소리를 냄
+            }
+            updateSoundIcons();
+        }
+        document.getElementById('btnSoundToggle').addEventListener('click', toggleSound);
 
         document.getElementById('btnPause').addEventListener('click', pauseGame);
         document.getElementById('btnResumeGame').addEventListener('click', resumeFromPause);
@@ -16467,14 +16482,7 @@ ${[0, 1, 2, 3].map(slot => {
             showTitle();
         });
         document.getElementById('btnTitleFull').addEventListener('click', toggleFullscreen);
-        document.getElementById('btnTitleSound').addEventListener('click', (e) => {
-            sfx.init();
-            sfx.enabled = !sfx.enabled;
-            // 직접 켜면 기기 무음 모드여도 소리를 냄
-            if (sfx.enabled && sfx.silent) sfx.setHold('silent', false);
-            e.currentTarget.textContent = sfx.enabled ? '🔊' : '🔇';
-            document.getElementById('btnSoundToggle').textContent = sfx.enabled ? '🔊' : '🔇';
-        });
+        document.getElementById('btnTitleSound').addEventListener('click', toggleSound);
         (function makeTitleLeaves() {
             const box = document.getElementById('titleLeaves');
             const kinds = ['🍃', '🌸', '🍂', '🍃', '✨', '🌼'];
@@ -16647,7 +16655,14 @@ ${[0, 1, 2, 3].map(slot => {
             },
             setSilent(on) {
                 sfx.setHold('silent', on);
-                if (on && sfx.enabled) showToast('🔇 무음 모드', '기기가 무음 모드라 소리를 껐어요 · 🔊 버튼을 누르면 켤 수 있어요');
+                updateSoundIcons();
+                if (!on || !sfx.enabled) return;
+                // 시작할 때 알려 오면 로딩 가림막이 걷힌 뒤에 안내 (가림막에 가려 못 보던 문제)
+                const tell = () => {
+                    if (document.getElementById('storeBoot')) { setTimeout(tell, 300); return; }
+                    if (sfx.silent && sfx.enabled) showToast('🔇 무음 모드', '기기가 무음 모드라 소리를 껐어요 · 🔊 버튼을 누르면 켤 수 있어요');
+                };
+                tell();
             },
             // 앱이 알려 준 시스템 바 여백을 safe-area 대신 씀.
             // 실기기에서 값이 기기 픽셀로 와서 그대로 쓰면 HUD가 크게 내려옴 → CSS 픽셀로 바꾸고,
